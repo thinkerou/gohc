@@ -1,1 +1,1 @@
-# Go Http Client via gohc
+# Go Http Client
