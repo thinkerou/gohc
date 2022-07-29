@@ -1,6 +1,7 @@
 package gohc
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -73,7 +74,14 @@ func (up *UriParser) isValidProtocolChars(protocol string) bool {
 }
 
 func (up *UriParser) isValidProtocol(protocol string) bool {
-	return len(protocol) > 0 && unicode.IsLetter(protocol[0]) && up.isValidProtocolChars(protocol)
+	var first rune
+	for i, r := range protocol {
+		if i == 0 {
+			first = r
+			break
+		}
+	}
+	return len(protocol) > 0 && unicode.IsLetter(first) && up.isValidProtocolChars(protocol)
 }
 
 func (up *UriParser) computeInitialScheme() {
@@ -92,65 +100,150 @@ func (up *UriParser) computeInitialScheme() {
 	}
 }
 
-func (up *UriParser) overrideWithContext(context Uri) {
-	// todo
+func (up *UriParser) overrideWithContext(context Uri) bool {
+	isRelative := false
+	if up.scheme == context.scheme {
+		if context.path != "" && context.path[0] == '/' {
+			up.scheme = ""
+		}
+		if up.scheme == "" {
+			up.scheme = context.scheme
+			up.userInfo = context.userInfo
+			up.host = context.host
+			up.port = context.port
+			up.path = context.path
+			isRelative = true
+		}
+	}
+	return isRelative
 }
 
 func (up *UriParser) findWithinCurrentRange(c byte) int {
-	// todo
-	return 0
+	pos := strings.IndexByte(up.originalUrl, c)
+	if pos > up.end {
+		return -1
+	} else {
+		return pos
+	}
 }
 
 func (up *UriParser) trimFragment() {
-	// todo
+	charpPosition := up.findWithinCurrentRange('#')
+	if charpPosition >= 0 {
+		up.end = charpPosition
+		if charpPosition+1 < len(up.originalUrl) {
+			up.fragment = up.originalUrl[charpPosition+1:]
+		}
+	}
 }
 
 func (up *UriParser) inheritContextQuery(context Uri, isRelative bool) {
-	// todo
+	if isRelative && up.currentIndex == up.end {
+		up.query = context.query
+		up.fragment = context.fragment
+	}
 }
 
 func (up *UriParser) computeQuery() bool {
-	// todo
+	if up.currentIndex < up.end {
+		askPosition := up.findWithinCurrentRange('?')
+		if askPosition != -1 {
+			up.query = up.originalUrl[askPosition+1 : up.end]
+			if up.end > askPosition {
+				up.end = askPosition
+			}
+			return askPosition == up.currentIndex
+		}
+	}
 	return false
 }
 
 func (up *UriParser) currentPositionStartsWith4Slashes() bool {
-	// todo
-	return false
+	b, _ := regexp.MatchString("////", up.originalUrl)
+	return b
 }
 
 func (up *UriParser) currentPositionStartsWith2Slashes() bool {
-	// todo
-	return false
+	b, _ := regexp.MatchString("//", up.originalUrl)
+	return b
 }
 
 func (up *UriParser) computeAuthority() {
-	// todo
+	authorityEndPosition := up.findWithinCurrentRange('/')
+	if authorityEndPosition == -1 {
+		authorityEndPosition = up.findWithinCurrentRange('?')
+		if authorityEndPosition == -1 {
+			authorityEndPosition = up.end
+		}
+	}
+	up.authority = up.originalUrl[up.currentIndex:authorityEndPosition]
+	up.host = up.originalUrl[up.currentIndex:authorityEndPosition]
+	up.currentIndex = authorityEndPosition
 }
 
 func (up *UriParser) computeUserInfo() {
-	// todo
+	atPosition := strings.IndexByte(up.authority, '@')
+	if atPosition != -1 {
+		up.userInfo = up.authority[0:atPosition]
+		up.host = up.authority[atPosition+1:]
+	}
 }
 
 func (up *UriParser) isMaybeIPV6() bool {
-	// todo
-	return false
+	return len(up.host) > 0 && up.host[0] == '['
 }
 
 func (up *UriParser) computeIPV6() {
-	// todo
+	postitionAfterClosingSquareBrace := strings.IndexByte(up.host, ']') + 1
+	if postitionAfterClosingSquareBrace > 1 {
+		up.port = -1
+		if len(up.host) > postitionAfterClosingSquareBrace {
+			if up.host[postitionAfterClosingSquareBrace] == ':' {
+				portPosition := postitionAfterClosingSquareBrace + 1
+				if len(up.host) > portPosition {
+					up.port, _ = strconv.Atoi(up.host[portPosition:])
+				}
+			}
+		} else {
+			panic("Invalid authority field: " + up.authority)
+		}
+		up.host = up.host[0:postitionAfterClosingSquareBrace]
+	} else {
+		panic("Invalid authority field: " + up.authority)
+	}
 }
 
 func (up *UriParser) computeRegularHostPort() {
-	// todo
+	colonPosition := strings.IndexByte(up.host, ':')
+	up.port = -1
+	if colonPosition >= 0 {
+		portPosition := colonPosition + 1
+		if len(up.host) > portPosition {
+			up.port, _ = strconv.Atoi(up.host[portPosition:])
+		}
+		up.host = up.host[0:colonPosition]
+	}
 }
 
 func (up *UriParser) removeEmbeddedDot() {
-	// todo
+	up.path = strings.ReplaceAll(up.path, "/./", "/")
 }
 
 func (up *UriParser) removeEmbedded2Dots() {
-	// todo
+	i := 0
+	for i = strings.Index(up.path, "/../"); i >= 0; {
+		if i > 0 {
+			up.end = strings.LastIndexByte(up.path, '/')
+			if up.end >= 0 && strings.Index(up.path, "/../") != 0 {
+				up.path = up.path[0:up.end] + up.path[i+3:]
+				i = 0
+			} else if up.end == 0 {
+				break
+			}
+		} else {
+			i += 3
+		}
+	}
 }
 
 func (up *UriParser) removeTailing2Dots() {
