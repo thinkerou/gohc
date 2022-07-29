@@ -102,7 +102,7 @@ func (up *UriParser) computeInitialScheme() {
 
 func (up *UriParser) overrideWithContext(context Uri) bool {
 	isRelative := false
-	if up.scheme == context.scheme {
+	if strings.EqualFold(up.scheme, context.scheme) {
 		if context.path != "" && context.path[0] == '/' {
 			up.scheme = ""
 		}
