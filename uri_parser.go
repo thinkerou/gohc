@@ -23,7 +23,7 @@ type UriParser struct {
 	currentIndex int
 }
 
-func (up *UriParser) Parse(context Uri, originalUrl string) {
+func (up *UriParser) Parse(uri Uri, originalUrl string) {
 	up.originalUrl = originalUrl
 	up.end = len(originalUrl)
 
@@ -33,9 +33,9 @@ func (up *UriParser) Parse(context Uri, originalUrl string) {
 	if !up.isFragmentOnly() {
 		up.computeInitialScheme()
 	}
-	isRelative := up.overrideWithContext(context)
+	isRelative := up.overrideWithUri(uri)
 	up.trimFragment()
-	up.inheritContextQuery(context, isRelative)
+	up.inheritUriQuery(uri, isRelative)
 	queryOnly := up.computeQuery()
 	up.parseAuthority()
 	up.computePath(queryOnly)
@@ -100,18 +100,18 @@ func (up *UriParser) computeInitialScheme() {
 	}
 }
 
-func (up *UriParser) overrideWithContext(context Uri) bool {
+func (up *UriParser) overrideWithUri(uri Uri) bool {
 	isRelative := false
-	if strings.EqualFold(up.scheme, context.scheme) {
-		if context.path != "" && context.path[0] == '/' {
+	if strings.EqualFold(up.scheme, uri.scheme) {
+		if uri.path != "" && uri.path[0] == '/' {
 			up.scheme = ""
 		}
 		if up.scheme == "" {
-			up.scheme = context.scheme
-			up.userInfo = context.userInfo
-			up.host = context.host
-			up.port = context.port
-			up.path = context.path
+			up.scheme = uri.scheme
+			up.userInfo = uri.userInfo
+			up.host = uri.host
+			up.port = uri.port
+			up.path = uri.path
 			isRelative = true
 		}
 	}
@@ -137,10 +137,10 @@ func (up *UriParser) trimFragment() {
 	}
 }
 
-func (up *UriParser) inheritContextQuery(context Uri, isRelative bool) {
+func (up *UriParser) inheritUriQuery(uri Uri, isRelative bool) {
 	if isRelative && up.currentIndex == up.end {
-		up.query = context.query
-		up.fragment = context.fragment
+		up.query = uri.query
+		up.fragment = uri.fragment
 	}
 }
 
