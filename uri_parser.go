@@ -46,7 +46,9 @@ func (up *UriParser) trimLeft() {
 		up.start++
 	}
 
-	// todo
+	if ok, _ := regexp.MatchString("url:", up.originalUrl); ok {
+		up.start += 4
+	}
 }
 
 func (up *UriParser) trimRight() {
