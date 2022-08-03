@@ -15,21 +15,21 @@ type UriParser struct {
 	fragment  string
 	authority string
 	path      string
-	userInfo  string
+	user      string
 
-	originalUrl  string
-	start        int
-	end          int
-	currentIndex int
+	url     string
+	start   int
+	end     int
+	current int
 }
 
-func (up *UriParser) Parse(uri Uri, originalUrl string) {
-	up.originalUrl = originalUrl
-	up.end = len(originalUrl)
+func (up *UriParser) Parse(uri Uri, url string) {
+	up.url = url
+	up.end = len(url)
 
 	up.trimLeft()
 	up.trimRight()
-	up.currentIndex = up.start
+	up.current = up.start
 	if !up.isFragmentOnly() {
 		up.computeInitialScheme()
 	}
@@ -42,24 +42,24 @@ func (up *UriParser) Parse(uri Uri, originalUrl string) {
 }
 
 func (up *UriParser) trimLeft() {
-	for up.start < up.end && up.originalUrl[up.start] <= ' ' {
+	for up.start < up.end && up.url[up.start] <= ' ' {
 		up.start++
 	}
 
-	if ok, _ := regexp.MatchString("url:", up.originalUrl); ok {
+	if ok, _ := regexp.MatchString("url:", up.url); ok {
 		up.start += 4
 	}
 }
 
 func (up *UriParser) trimRight() {
-	up.end = len(up.originalUrl)
-	for up.end > 0 && up.originalUrl[up.end-1] <= ' ' {
+	up.end = len(up.url)
+	for up.end > 0 && up.url[up.end-1] <= ' ' {
 		up.end--
 	}
 }
 
 func (up *UriParser) isFragmentOnly() bool {
-	return up.start < len(up.originalUrl) && up.originalUrl[up.start] == '#'
+	return up.start < len(up.url) && up.url[up.start] == '#'
 }
 
 func (up *UriParser) isValidProtocolChar(c rune) bool {
@@ -87,13 +87,13 @@ func (up *UriParser) isValidProtocol(protocol string) bool {
 }
 
 func (up *UriParser) computeInitialScheme() {
-	for i := up.currentIndex; i < up.end; i++ {
-		c := up.originalUrl[i]
+	for i := up.current; i < up.end; i++ {
+		c := up.url[i]
 		if c == ':' {
-			s := up.originalUrl[up.currentIndex:i]
+			s := up.url[up.current:i]
 			if up.isValidProtocol(s) {
 				up.scheme = strings.ToLower(s)
-				up.currentIndex++
+				up.current++
 			}
 			break
 		} else if c == '/' {
@@ -110,7 +110,7 @@ func (up *UriParser) overrideWithUri(uri Uri) bool {
 		}
 		if up.scheme == "" {
 			up.scheme = uri.scheme
-			up.userInfo = uri.userInfo
+			up.user = uri.user
 			up.host = uri.host
 			up.port = uri.port
 			up.path = uri.path
@@ -121,7 +121,7 @@ func (up *UriParser) overrideWithUri(uri Uri) bool {
 }
 
 func (up *UriParser) findWithinCurrentRange(c byte) int {
-	pos := strings.IndexByte(up.originalUrl, c)
+	pos := strings.IndexByte(up.url, c)
 	if pos > up.end {
 		return -1
 	} else {
@@ -133,40 +133,40 @@ func (up *UriParser) trimFragment() {
 	charpPosition := up.findWithinCurrentRange('#')
 	if charpPosition >= 0 {
 		up.end = charpPosition
-		if charpPosition+1 < len(up.originalUrl) {
-			up.fragment = up.originalUrl[charpPosition+1:]
+		if charpPosition+1 < len(up.url) {
+			up.fragment = up.url[charpPosition+1:]
 		}
 	}
 }
 
 func (up *UriParser) inheritUriQuery(uri Uri, isRelative bool) {
-	if isRelative && up.currentIndex == up.end {
+	if isRelative && up.current == up.end {
 		up.query = uri.query
 		up.fragment = uri.fragment
 	}
 }
 
 func (up *UriParser) computeQuery() bool {
-	if up.currentIndex < up.end {
+	if up.current < up.end {
 		askPosition := up.findWithinCurrentRange('?')
 		if askPosition != -1 {
-			up.query = up.originalUrl[askPosition+1 : up.end]
+			up.query = up.url[askPosition+1 : up.end]
 			if up.end > askPosition {
 				up.end = askPosition
 			}
-			return askPosition == up.currentIndex
+			return askPosition == up.current
 		}
 	}
 	return false
 }
 
 func (up *UriParser) currentPositionStartsWith4Slashes() bool {
-	b, _ := regexp.MatchString("////", up.originalUrl)
+	b, _ := regexp.MatchString("////", up.url)
 	return b
 }
 
 func (up *UriParser) currentPositionStartsWith2Slashes() bool {
-	b, _ := regexp.MatchString("//", up.originalUrl)
+	b, _ := regexp.MatchString("//", up.url)
 	return b
 }
 
@@ -178,15 +178,15 @@ func (up *UriParser) computeAuthority() {
 			authorityEndPosition = up.end
 		}
 	}
-	up.authority = up.originalUrl[up.currentIndex:authorityEndPosition]
-	up.host = up.originalUrl[up.currentIndex:authorityEndPosition]
-	up.currentIndex = authorityEndPosition
+	up.authority = up.url[up.current:authorityEndPosition]
+	up.host = up.url[up.current:authorityEndPosition]
+	up.current = authorityEndPosition
 }
 
 func (up *UriParser) computeUserInfo() {
 	atPosition := strings.IndexByte(up.authority, '@')
 	if atPosition != -1 {
-		up.userInfo = up.authority[0:atPosition]
+		up.user = up.authority[0:atPosition]
 		up.host = up.authority[atPosition+1:]
 	}
 }
@@ -273,7 +273,7 @@ func (up *UriParser) removeTrailingDot() {
 
 func (up *UriParser) handleRelativePath() {
 	lastSlashPosition := strings.LastIndexByte(up.path, '/')
-	pathEnd := up.originalUrl[up.currentIndex:up.end]
+	pathEnd := up.url[up.current:up.end]
 	if lastSlashPosition == -1 {
 		if up.authority != "" {
 			up.path = "/" + pathEnd
@@ -297,7 +297,7 @@ func (up *UriParser) handlePathDots() {
 
 func (up *UriParser) parseAuthority() {
 	if !up.currentPositionStartsWith4Slashes() && up.currentPositionStartsWith2Slashes() {
-		up.currentIndex += 2
+		up.current += 2
 		up.computeAuthority()
 		up.computeUserInfo()
 		if up.host != "" {
@@ -319,12 +319,12 @@ func (up *UriParser) parseAuthority() {
 }
 
 func (up *UriParser) computeRegularPath() {
-	if up.originalUrl[up.currentIndex] == '/' {
-		up.path = up.originalUrl[up.currentIndex:up.end]
+	if up.url[up.current] == '/' {
+		up.path = up.url[up.current:up.end]
 	} else if up.path == "" {
 		up.handleRelativePath()
 	} else {
-		pathEnd := up.originalUrl[up.currentIndex:up.end]
+		pathEnd := up.url[up.current:up.end]
 		if pathEnd != "" && pathEnd[0] != '/' {
 			up.path = "/" + pathEnd
 		} else {
@@ -344,7 +344,7 @@ func (up *UriParser) computeQueryOnlyPath() {
 }
 
 func (up *UriParser) computePath(queryOnly bool) {
-	if up.currentIndex < up.end {
+	if up.current < up.end {
 		up.computeRegularPath()
 	} else if queryOnly && up.path != "" {
 		up.computeQueryOnlyPath()
