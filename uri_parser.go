@@ -52,8 +52,7 @@ func (up *UriParser) trimLeft() {
 }
 
 func (up *UriParser) trimRight() {
-	up.end = len(up.url)
-	for up.end > 0 && up.url[up.end-1] <= ' ' {
+	for up.end = len(up.url); up.end > 0 && up.url[up.end-1] <= ' '; {
 		up.end--
 	}
 }
@@ -96,46 +95,46 @@ func (up *UriParser) computeInitialScheme() {
 				up.current++
 			}
 			break
-		} else if c == '/' {
+		}
+		if c == '/' {
 			break
 		}
 	}
 }
 
 func (up *UriParser) overrideWithUri(uri Uri) bool {
-	isRelative := false
-	if strings.EqualFold(up.scheme, uri.scheme) {
-		if uri.path != "" && uri.path[0] == '/' {
-			up.scheme = ""
-		}
-		if up.scheme == "" {
-			up.scheme = uri.scheme
-			up.user = uri.user
-			up.host = uri.host
-			up.port = uri.port
-			up.path = uri.path
-			isRelative = true
-		}
+	if !strings.EqualFold(up.scheme, uri.scheme) {
+		return false
 	}
-	return isRelative
+	if uri.path != "" && uri.path[0] == '/' {
+		up.scheme = ""
+	}
+	if up.scheme == "" {
+		up.scheme = uri.scheme
+		up.user = uri.user
+		up.host = uri.host
+		up.port = uri.port
+		up.path = uri.path
+		return true
+	}
+	return false
 }
 
 func (up *UriParser) findWithinCurrentRange(c byte) int {
-	pos := strings.IndexByte(up.url, c)
-	if pos > up.end {
-		return -1
-	} else {
+	if pos := strings.IndexByte(up.url, c); pos <= up.end {
 		return pos
 	}
+	return -1
 }
 
 func (up *UriParser) trimFragment() {
 	charpPosition := up.findWithinCurrentRange('#')
-	if charpPosition >= 0 {
-		up.end = charpPosition
-		if charpPosition+1 < len(up.url) {
-			up.fragment = up.url[charpPosition+1:]
-		}
+	if charpPosition < 0 {
+		return
+	}
+	up.end = charpPosition
+	if charpPosition+1 < len(up.url) {
+		up.fragment = up.url[charpPosition+1:]
 	}
 }
 
@@ -147,15 +146,15 @@ func (up *UriParser) inheritUriQuery(uri Uri, isRelative bool) {
 }
 
 func (up *UriParser) computeQuery() bool {
-	if up.current < up.end {
-		askPosition := up.findWithinCurrentRange('?')
-		if askPosition != -1 {
-			up.query = up.url[askPosition+1 : up.end]
-			if up.end > askPosition {
-				up.end = askPosition
-			}
-			return askPosition == up.current
+	if up.current >= up.end {
+		return false
+	}
+	if askPosition := up.findWithinCurrentRange('?'); askPosition != -1 {
+		up.query = up.url[askPosition+1 : up.end]
+		if up.end > askPosition {
+			up.end = askPosition
 		}
+		return askPosition == up.current
 	}
 	return false
 }
@@ -184,8 +183,7 @@ func (up *UriParser) computeAuthority() {
 }
 
 func (up *UriParser) computeUserInfo() {
-	atPosition := strings.IndexByte(up.authority, '@')
-	if atPosition != -1 {
+	if atPosition := strings.IndexByte(up.authority, '@'); atPosition != -1 {
 		up.user = up.authority[0:atPosition]
 		up.host = up.authority[atPosition+1:]
 	}
@@ -197,22 +195,20 @@ func (up *UriParser) isMaybeIPV6() bool {
 
 func (up *UriParser) computeIPV6() {
 	postitionAfterClosingSquareBrace := strings.IndexByte(up.host, ']') + 1
-	if postitionAfterClosingSquareBrace > 1 {
-		up.port = -1
-		if len(up.host) > postitionAfterClosingSquareBrace {
-			if up.host[postitionAfterClosingSquareBrace] == ':' {
-				portPosition := postitionAfterClosingSquareBrace + 1
-				if len(up.host) > portPosition {
-					up.port, _ = strconv.Atoi(up.host[portPosition:])
-				}
-			}
-		} else {
-			panic("Invalid authority field: " + up.authority)
-		}
-		up.host = up.host[0:postitionAfterClosingSquareBrace]
-	} else {
+	if postitionAfterClosingSquareBrace <= 1 {
 		panic("Invalid authority field: " + up.authority)
 	}
+	up.port = -1
+	if len(up.host) <= postitionAfterClosingSquareBrace {
+		panic("Invalid authority field: " + up.authority)
+	}
+	if up.host[postitionAfterClosingSquareBrace] == ':' {
+		portPosition := postitionAfterClosingSquareBrace + 1
+		if len(up.host) > portPosition {
+			up.port, _ = strconv.Atoi(up.host[portPosition:])
+		}
+	}
+	up.host = up.host[0:postitionAfterClosingSquareBrace]
 }
 
 func (up *UriParser) computeRegularHostPort() {
@@ -232,18 +228,19 @@ func (up *UriParser) removeEmbeddedDot() {
 }
 
 func (up *UriParser) removeEmbedded2Dots() {
-	i := 0
-	for i = strings.Index(up.path, "/../"); i >= 0; {
-		if i > 0 {
-			up.end = strings.LastIndexByte(up.path, '/')
-			if up.end >= 0 && strings.Index(up.path, "/../") != 0 {
-				up.path = up.path[0:up.end] + up.path[i+3:]
-				i = 0
-			} else if up.end == 0 {
-				break
-			}
-		} else {
+	for i := strings.Index(up.path, "/../"); i >= 0; {
+		if i <= 0 {
 			i += 3
+			continue
+		}
+		up.end = strings.LastIndexByte(up.path, '/')
+		if up.end >= 0 && strings.Index(up.path, "/../") != 0 {
+			up.path = up.path[0:up.end] + up.path[i+3:]
+			i = 0
+			continue
+		}
+		if up.end == 0 {
+			break
 		}
 	}
 }
@@ -251,11 +248,10 @@ func (up *UriParser) removeEmbedded2Dots() {
 func (up *UriParser) removeTailing2Dots() {
 	for strings.HasSuffix(up.path, "/..") {
 		up.end = strings.LastIndexByte(up.path, '/') // fixme
-		if up.end >= 0 {
-			up.path = up.path[0 : up.end+1]
-		} else {
+		if up.end < 0 {
 			break
 		}
+		up.path = up.path[0 : up.end+1]
 	}
 }
 
@@ -286,13 +282,14 @@ func (up *UriParser) handleRelativePath() {
 }
 
 func (up *UriParser) handlePathDots() {
-	if strings.IndexByte(up.path, '.') != -1 {
-		up.removeEmbeddedDot()
-		up.removeEmbedded2Dots()
-		up.removeTailing2Dots()
-		up.removeStartingDot()
-		up.removeTrailingDot()
+	if strings.IndexByte(up.path, '.') == -1 {
+		return
 	}
+	up.removeEmbeddedDot()
+	up.removeEmbedded2Dots()
+	up.removeTailing2Dots()
+	up.removeStartingDot()
+	up.removeTrailingDot()
 }
 
 func (up *UriParser) parseAuthority() {
@@ -335,18 +332,19 @@ func (up *UriParser) computeRegularPath() {
 }
 
 func (up *UriParser) computeQueryOnlyPath() {
-	lastSlashPosition := strings.LastIndexByte(up.path, '/')
-	if lastSlashPosition < 0 {
-		up.path = "/"
-	} else {
+	if lastSlashPosition := strings.LastIndexByte(up.path, '/'); lastSlashPosition >= 0 {
 		up.path = up.path[0:lastSlashPosition] + "/"
+	} else {
+		up.path = "/"
 	}
 }
 
 func (up *UriParser) computePath(queryOnly bool) {
 	if up.current < up.end {
 		up.computeRegularPath()
-	} else if queryOnly && up.path != "" {
+		return
+	}
+	if queryOnly && up.path != "" {
 		up.computeQueryOnlyPath()
 	}
 }
